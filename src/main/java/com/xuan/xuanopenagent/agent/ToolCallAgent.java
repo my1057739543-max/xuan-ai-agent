@@ -1,0 +1,22 @@
+package com.xuan.xuanopenagent.agent;
+
+import com.xuan.xuanopenagent.agent.model.AgentContext;
+import com.xuan.xuanopenagent.config.AgentProperties;
+import com.xuan.xuanopenagent.tools.ToolRegistry;
+
+import java.util.Objects;
+
+public abstract class ToolCallAgent extends ReActAgent {
+
+	protected final ToolRegistry toolRegistry;
+
+	protected ToolCallAgent(AgentProperties agentProperties, ToolRegistry toolRegistry) {
+		super(agentProperties);
+		this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry must not be null");
+	}
+
+	@Override
+	protected String observeToolResult(AgentContext context, Decision decision, String thought) {
+		return toolRegistry.invoke(decision.content(), context.getMessage());
+	}
+}

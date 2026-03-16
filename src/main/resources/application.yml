@@ -1,0 +1,54 @@
+spring:
+  ai:
+    deepseek:
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.7
+    mcp:
+      client:
+        enabled: true
+        type: SYNC
+        request-timeout: 30s
+        stdio:
+          servers-configuration: classpath:mcp-servers.json
+  profiles:
+    active: local
+  application:
+    name:
+      xuan-open-agent
+  main:
+    web-application-type: servlet
+server:
+  port:
+    8123
+
+xuan:
+  agent:
+    # Global thinking step limit. Change here and restart backend to affect the whole app.
+    max-steps: 20
+    # Global tool invocation limit. Change here and restart backend to affect the whole app.
+    max-tool-calls: 10
+    tool-timeout-seconds: 180
+    model-name: ${spring.ai.deepseek.chat.options.model:deepseek-chat}
+
+
+
+
+# springdoc-openapi????
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'default'
+      paths-to-match: '/**'
+      packages-to-scan: com.xuan.xuanopenagent.Controller,com.xuan.xuanopenagent.controller
+# knife4j???????????????
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "amap-maps": {
+      "command": "cmd.exe",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@amap/amap-maps-mcp-server"
+      ]
+    }
+  }
+}
