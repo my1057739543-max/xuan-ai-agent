@@ -48,7 +48,9 @@ function eventLabel(event: AgentEvent): string {
   padding: 18px;
   display: grid;
   gap: 14px;
-  min-height: 420px;
+  height: clamp(420px, 62vh, 760px);
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .trace-head {
@@ -79,6 +81,18 @@ ul {
 
 .timeline {
   position: relative;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.timeline::-webkit-scrollbar {
+  width: 8px;
+}
+
+.timeline::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line-strong) 55%, transparent);
 }
 
 .timeline::before {

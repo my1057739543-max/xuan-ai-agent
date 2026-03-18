@@ -53,6 +53,8 @@ public class ChatRequest {
 
         private Integer maxSteps;
         private Double temperature;
+        private Boolean useKnowledgeBase = false;
+        private String fileIdFilter;
 
         public Integer getMaxSteps() {
             return maxSteps;
@@ -68,6 +70,22 @@ public class ChatRequest {
 
         public void setTemperature(Double temperature) {
             this.temperature = temperature;
+        }
+
+        public Boolean getUseKnowledgeBase() {
+            return useKnowledgeBase;
+        }
+
+        public void setUseKnowledgeBase(Boolean useKnowledgeBase) {
+            this.useKnowledgeBase = useKnowledgeBase;
+        }
+
+        public String getFileIdFilter() {
+            return fileIdFilter;
+        }
+
+        public void setFileIdFilter(String fileIdFilter) {
+            this.fileIdFilter = fileIdFilter;
         }
     }
 }

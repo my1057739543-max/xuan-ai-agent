@@ -1,10 +1,30 @@
 spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/xuan_open_agent
+    # username and password are in application-local.yml
   ai:
     deepseek:
       chat:
         options:
           model: deepseek-chat
           temperature: 0.7
+    dashscope:
+      # Keep DeepSeek as chat provider.
+      chat:
+        enabled: false
+      embedding:
+        enabled: true
+        options:
+          model: text-embedding-v3
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        schema-name: public
+        table-name: vector_store
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1024
+        max-document-batch-size: 10000
     mcp:
       client:
         enabled: true
@@ -24,6 +44,19 @@ server:
     8123
 
 xuan:
+  rag:
+    upload-dir: ./data/uploads
+    chunk-size: 800
+    min-chunk-size-chars: 350
+    min-chunk-length-to-embed: 10
+    top-k: 4
+    similarity-threshold: 0.5
+    advisor-allow-empty-context: true
+    max-file-size-mb: 20
+    enabled-file-types:
+      - txt
+      - md
+      - pdf
   agent:
     # Global thinking step limit. Change here and restart backend to affect the whole app.
     max-steps: 20
@@ -31,6 +64,13 @@ xuan:
     max-tool-calls: 10
     tool-timeout-seconds: 180
     model-name: ${spring.ai.deepseek.chat.options.model:deepseek-chat}
+  tools:
+    web-search:
+      enabled: true
+      provider: tavily
+      endpoint: https://api.tavily.com/search
+      max-results: 5
+      timeout-seconds: 15
 
 
 
@@ -46,7 +86,7 @@ springdoc:
   group-configs:
     - group: 'default'
       paths-to-match: '/**'
-      packages-to-scan: com.xuan.xuanopenagent.Controller,com.xuan.xuanopenagent.controller
+      packages-to-scan: com.xuan.xuanopenagent.controller
 # knife4j???????????????
 knife4j:
   enable: true

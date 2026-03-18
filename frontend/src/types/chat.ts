@@ -3,6 +3,8 @@ export type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 export interface ChatOptions {
   maxSteps?: number
   temperature?: number
+  useKnowledgeBase?: boolean
+  fileIdFilter?: string
 }
 
 export interface ChatRequest {
@@ -37,4 +39,36 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+}
+
+export interface RetrievalHit {
+  fileId: string
+  fileName: string
+  chunkIndex: number
+  sourceType: string
+  score: number
+  contentSnippet: string
+}
+
+export type KnowledgeFileStatus = 'PROCESSING' | 'READY' | 'FAILED'
+
+export interface KnowledgeFile {
+  fileId: string
+  originalName: string
+  storedName: string
+  extension: string
+  mimeType: string
+  sizeBytes: number
+  status: KnowledgeFileStatus
+  errorMessage?: string
+  documentCount?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface RagIngestionResult {
+  fileId: string
+  status: string
+  documentCount: number
+  chunkCount: number
 }

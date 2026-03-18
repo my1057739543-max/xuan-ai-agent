@@ -41,7 +41,9 @@ function formatTime(timestamp: string): string {
   padding: 18px;
   display: grid;
   gap: 14px;
-  min-height: 420px;
+  height: clamp(420px, 62vh, 760px);
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .list-head {
@@ -62,6 +64,18 @@ ul {
   display: grid;
   gap: 10px;
   align-content: start;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+ul::-webkit-scrollbar {
+  width: 8px;
+}
+
+ul::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line-strong) 55%, transparent);
 }
 
 .bubble {
