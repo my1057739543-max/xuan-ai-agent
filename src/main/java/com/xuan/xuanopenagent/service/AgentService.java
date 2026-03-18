@@ -3,13 +3,10 @@ package com.xuan.xuanopenagent.service;
 import com.xuan.xuanopenagent.agent.XuanAgent;
 import com.xuan.xuanopenagent.agent.model.AgentContext;
 import com.xuan.xuanopenagent.agent.model.AgentEvent;
-import com.xuan.xuanopenagent.config.RagAdvisorConfig;
 import com.xuan.xuanopenagent.model.ChatRequest;
 import com.xuan.xuanopenagent.rag.RagRetrievalService;
 import com.xuan.xuanopenagent.rag.model.RetrievalHit;
 import com.xuan.xuanopenagent.tools.ToolRegistry;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -23,21 +20,15 @@ import java.util.concurrent.CompletableFuture;
 public class AgentService {
 
     private final XuanAgent xuanAgent;
-    private final ChatClient xuanAgentChatClient;
     private final ToolRegistry toolRegistry;
     private final RagRetrievalService ragRetrievalService;
-    private final RagAdvisorConfig ragAdvisorConfig;
 
     public AgentService(XuanAgent xuanAgent,
-                        ChatClient xuanAgentChatClient,
                         ToolRegistry toolRegistry,
-                        RagRetrievalService ragRetrievalService,
-                        RagAdvisorConfig ragAdvisorConfig) {
+                        RagRetrievalService ragRetrievalService) {
         this.xuanAgent = xuanAgent;
-        this.xuanAgentChatClient = xuanAgentChatClient;
         this.toolRegistry = toolRegistry;
         this.ragRetrievalService = ragRetrievalService;
-        this.ragAdvisorConfig = ragAdvisorConfig;
     }
 
     public SseEmitter streamChat(ChatRequest request) {
@@ -46,12 +37,7 @@ public class AgentService {
 
         CompletableFuture.runAsync(() -> {
             try {
-                if (isKnowledgeBaseEnabled(request)) {
-                    runKnowledgeBaseChat(request, context, emitter);
-                    emitter.complete();
-                    return;
-                }
-
+                maybeApplyKnowledgeContext(request, context, emitter);
                 xuanAgent.run(context, event -> sendEvent(emitter, event));
                 emitter.complete();
             } catch (Exception ex) {
@@ -72,43 +58,22 @@ public class AgentService {
         return options != null && Boolean.TRUE.equals(options.getUseKnowledgeBase());
     }
 
-    private void runKnowledgeBaseChat(ChatRequest request, AgentContext context, SseEmitter emitter) {
+    private void maybeApplyKnowledgeContext(ChatRequest request, AgentContext context, SseEmitter emitter) {
+        if (!isKnowledgeBaseEnabled(request)) {
+            return;
+        }
+
         String fileIdFilter = request.getOptions() == null ? null : request.getOptions().getFileIdFilter();
 
         List<RetrievalHit> hits = ragRetrievalService.retrieve(request.getMessage(), fileIdFilter);
         sendRetrievalEvent(emitter, context, hits);
 
-        RetrievalAugmentationAdvisor advisor = ragAdvisorConfig.buildRetrievalAdvisor(fileIdFilter);
-        String answer = xuanAgentChatClient.prompt()
-                .advisors(advisor)
-                .user(request.getMessage())
-                .call()
-                .content();
-
-        String finalAnswer = answer == null ? "" : answer;
-        sendEvent(emitter, AgentEvent.of(
-                context.getTraceId(),
-                context.getSessionId(),
-                context.getCurrentStep(),
-                "final",
-                Map.of(
-                        "state", "RESPONDING",
-                        "content", finalAnswer,
-                        "timestamp", Instant.now().toString()
-                )
-        ));
-
-        sendEvent(emitter, AgentEvent.of(
-                context.getTraceId(),
-                context.getSessionId(),
-                context.getCurrentStep(),
-                "done",
-                Map.of(
-                        "state", "TERMINATED",
-                        "reason", "rag_responded",
-                        "timestamp", Instant.now().toString()
-                )
-        ));
+        String ragContext = ragRetrievalService.buildPromptContext(hits);
+        if (!ragContext.isBlank()) {
+            String enhancedMessage = request.getMessage() + "\n\n" + ragContext;
+            context.setMessage(enhancedMessage);
+            context.addHistory("retrieval_hits=" + hits.size());
+        }
     }
 
     private AgentContext toAgentContext(ChatRequest request) {
