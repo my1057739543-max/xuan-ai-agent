@@ -3,7 +3,11 @@ package com.xuan.xuanopenagent.agent;
 import com.xuan.xuanopenagent.agent.model.AgentContext;
 import com.xuan.xuanopenagent.config.AgentProperties;
 import com.xuan.xuanopenagent.tools.ToolRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -11,7 +15,13 @@ import java.util.List;
 @Component
 public class XuanAgent extends ToolCallAgent {
 
+	private static final Logger log = LoggerFactory.getLogger(XuanAgent.class);
+
 	private final ChatClient chatClient;
+
+	@Autowired(required = false)
+	@Qualifier("chunkingChatClient")
+	private ChatClient fallbackChatClient;
 
 	public XuanAgent(ChatClient xuanAgentChatClient, AgentProperties agentProperties, ToolRegistry toolRegistry) {
 		super(agentProperties, toolRegistry);
@@ -82,12 +92,25 @@ public class XuanAgent extends ToolCallAgent {
 	}
 
 	private String callModel(String systemPrompt, String userPrompt) {
-		String content = chatClient.prompt()
-				.system(systemPrompt)
-				.user(userPrompt)
-				.call()
-				.content();
-		return content == null ? "" : content.trim();
+		try {
+			String content = chatClient.prompt()
+					.system(systemPrompt)
+					.user(userPrompt)
+					.call()
+					.content();
+			return content == null ? "" : content.trim();
+		} catch (Exception primaryEx) {
+			log.warn("Primary chat model call failed, attempting fallback model: {}", primaryEx.getMessage());
+			if (fallbackChatClient == null) {
+				throw primaryEx;
+			}
+			String fallbackContent = fallbackChatClient.prompt()
+					.system(systemPrompt)
+					.user(userPrompt)
+					.call()
+					.content();
+			return fallbackContent == null ? "" : fallbackContent.trim();
+		}
 	}
 
 	private String buildSystemPrompt(String stage) {
