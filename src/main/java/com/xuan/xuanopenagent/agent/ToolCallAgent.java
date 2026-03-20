@@ -17,6 +17,13 @@ public abstract class ToolCallAgent extends ReActAgent {
 
 	@Override
 	protected String observeToolResult(AgentContext context, Decision decision, String thought) {
-		return toolRegistry.invoke(decision.content(), context.getMessage());
+		String toolInput = context.getMessage();
+		if (context.getHistory() != null && !context.getHistory().isEmpty()) {
+			String firstUserMessage = context.getHistory().get(0);
+			if (firstUserMessage != null && !firstUserMessage.isBlank()) {
+				toolInput = firstUserMessage;
+			}
+		}
+		return toolRegistry.invoke(decision.content(), toolInput);
 	}
 }

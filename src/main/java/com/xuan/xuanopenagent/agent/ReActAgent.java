@@ -20,6 +20,9 @@ public abstract class ReActAgent extends BaseAgent {
     @Override
     protected String doRun(AgentContext context, Consumer<AgentEvent> emitter, long deadlineMillis) {
 		int maxSteps = agentProperties.getMaxSteps();
+		String lastToolName = null;
+		String lastObservationSignature = null;
+		int repeatedToolObservationCount = 0;
 
 	emit(emitter, context, context.getCurrentStep(), "plan", Map.of(
 		"state", AgentState.INIT.name(),
@@ -129,6 +132,24 @@ public abstract class ReActAgent extends BaseAgent {
 		    "toolName", toolName,
 		    "content", observation
 	    ));
+
+	    String currentSignature = (observation == null ? "" : observation.trim());
+	    if (toolName.equals(lastToolName) && currentSignature.equals(lastObservationSignature)) {
+		repeatedToolObservationCount += 1;
+	    } else {
+		repeatedToolObservationCount = 0;
+	    }
+	    lastToolName = toolName;
+	    lastObservationSignature = currentSignature;
+
+	    if (repeatedToolObservationCount >= 1) {
+		emit(emitter, context, step, "loop_guard", Map.of(
+			"state", AgentState.OBSERVING.name(),
+			"message", "检测到重复工具调用结果，建议切换工具、调整查询或直接总结回复。",
+			"toolName", toolName
+		));
+		context.addHistory("loop_guard: duplicate tool observation detected, choose another tool or respond directly");
+	    }
 	}
 
 	String maxStepsResult = maxStepsMessage();
