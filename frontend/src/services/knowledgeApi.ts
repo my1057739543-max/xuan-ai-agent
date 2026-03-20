@@ -23,7 +23,7 @@ export async function uploadKnowledgeFile(file: File, gameKey: string, tags?: st
   return (await response.json()) as RagIngestionResult
 }
 
-export async function uploadKnowledgeFiles(files: File[], gameKey: string, tags?: string): Promise<RagBatchIngestionResult> {
+export async function uploadKnowledgeFiles(files: File[], gameKey: string, tags?: string, customGameNames?: string): Promise<RagBatchIngestionResult> {
   const formData = new FormData()
   for (const file of files) {
     formData.append('files', file)
@@ -31,6 +31,9 @@ export async function uploadKnowledgeFiles(files: File[], gameKey: string, tags?
   formData.append('gameKey', gameKey)
   if (tags && tags.trim()) {
     formData.append('tags', tags.trim())
+  }
+  if (customGameNames && customGameNames.trim()) {
+    formData.append('customGameNames', customGameNames.trim())
   }
 
   const response = await fetch(`${apiBaseUrl}/api/knowledge/upload/batch`, {

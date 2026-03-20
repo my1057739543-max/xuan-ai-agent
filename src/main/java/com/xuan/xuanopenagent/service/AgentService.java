@@ -40,6 +40,7 @@ public class AgentService {
     private final ToolRegistry toolRegistry;
     private final RagRetrievalService ragRetrievalService;
     private final RagProperties ragProperties;
+    private final CustomGameKeyRegistry customGameKeyRegistry;
     private final ConcurrentMap<String, String> sessionGameMemory = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, SessionSummary> sessionSummaryMemory = new ConcurrentHashMap<>();
 
@@ -96,11 +97,13 @@ public class AgentService {
     public AgentService(XuanAgent xuanAgent,
                         ToolRegistry toolRegistry,
                         RagRetrievalService ragRetrievalService,
-                        RagProperties ragProperties) {
+                        RagProperties ragProperties,
+                        CustomGameKeyRegistry customGameKeyRegistry) {
         this.xuanAgent = xuanAgent;
         this.toolRegistry = toolRegistry;
         this.ragRetrievalService = ragRetrievalService;
         this.ragProperties = ragProperties;
+        this.customGameKeyRegistry = customGameKeyRegistry;
     }
 
     public SseEmitter streamChat(ChatRequest request) {
@@ -549,6 +552,14 @@ public class AgentService {
         if (message == null || message.isBlank()) {
             return null;
         }
+        
+        // 优先检查动态注册的自定义游戏名
+        String customDetected = customGameKeyRegistry.detectFromMessage(message);
+        if (customDetected != null) {
+            log.debug("[RAG] game entity detected from custom registry: {}", customDetected);
+            return customDetected;
+        }
+        
         String lowered = message.toLowerCase(Locale.ROOT);
         for (Map.Entry<String, String> entry : GAME_ENTITY_ALIAS_MAP.entrySet()) {
             String key = entry.getKey().toLowerCase(Locale.ROOT);
@@ -589,6 +600,14 @@ public class AgentService {
         if (message == null || message.isBlank()) {
             return null;
         }
+        
+        // 优先检查动态注册的自定义游戏名
+        String customDetected = customGameKeyRegistry.detectFromMessage(message);
+        if (customDetected != null) {
+            log.debug("[RAG] game detected from custom registry: {}", customDetected);
+            return customDetected;
+        }
+        
         String lowered = message.toLowerCase(Locale.ROOT);
         List<Map.Entry<String, String>> entries = new ArrayList<>(ragProperties.getGameAliasMap().entrySet());
         entries.sort(Comparator.comparingInt((Map.Entry<String, String> it) -> it.getKey() == null ? 0 : it.getKey().length())
@@ -624,11 +643,7 @@ public class AgentService {
                 }
             }
         }
-        return ragProperties.getSupportedGameKeys().stream()
-                .map(it -> it.toLowerCase(Locale.ROOT).trim())
-                .filter(normalized::equals)
-                .findFirst()
-                .orElse(null);
+        return normalized.isBlank() ? null : normalized;
     }
 
     private boolean containsAlias(String message, String alias) {

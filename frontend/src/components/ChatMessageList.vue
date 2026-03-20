@@ -41,7 +41,7 @@ function formatTime(timestamp: string): string {
   padding: 18px;
   display: grid;
   gap: 14px;
-  height: clamp(420px, 62vh, 760px);
+  height: clamp(300px, 46vh, 580px);
   overflow: hidden;
   grid-template-rows: auto minmax(0, 1fr);
 }
@@ -160,5 +160,17 @@ small {
 .msg-leave-to {
   opacity: 0;
   transform: translateY(8px);
+}
+
+@media (max-height: 820px) {
+  .message-list {
+    height: clamp(260px, 40vh, 480px);
+  }
+}
+
+@media (max-width: 900px) {
+  .message-list {
+    height: clamp(240px, 38vh, 420px);
+  }
 }
 </style>

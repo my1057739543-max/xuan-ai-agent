@@ -14,7 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'refresh'): void
-  (event: 'upload', files: File[], gameKey: string, tags?: string): void
+  (event: 'upload', files: File[], gameKey: string, tags?: string, customGameNames?: string): void
   (event: 'delete', fileId: string): void
   (event: 'update:useKnowledgeBase', value: boolean): void
   (event: 'update:fileIdFilter', value: string): void
@@ -39,7 +39,7 @@ const emit = defineEmits<{
       <span>使用知识库回答</span>
     </label>
 
-    <KnowledgeUploadPanel :uploading="uploading" @upload="(files, gameKey, tags) => emit('upload', files, gameKey, tags)" />
+    <KnowledgeUploadPanel :uploading="uploading" @upload="(files, gameKey, tags, customGameNames) => emit('upload', files, gameKey, tags, customGameNames)" />
 
     <KnowledgeFileTable
       :files="files"
@@ -60,8 +60,12 @@ const emit = defineEmits<{
   box-shadow: var(--shadow-soft);
   padding: 14px;
   display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 10px;
   align-content: start;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .panel-head {

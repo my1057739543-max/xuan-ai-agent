@@ -137,7 +137,7 @@ class DeliveryControllerContractTest {
                                   ToolRegistry toolRegistry,
                                   RagRetrievalService ragRetrievalService,
                                   RagProperties ragProperties) {
-            return new AgentService(xuanAgent, toolRegistry, ragRetrievalService, ragProperties);
+            return new AgentService(xuanAgent, toolRegistry, ragRetrievalService, ragProperties, new com.xuan.xuanopenagent.service.CustomGameKeyRegistry());
         }
     }
 }

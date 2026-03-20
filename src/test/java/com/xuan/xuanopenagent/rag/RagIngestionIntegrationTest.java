@@ -75,7 +75,7 @@ class RagIngestionIntegrationTest {
         );
 
         // Act: Upload file
-        RagIngestionResult result = ragIngestionService.upload(testFile, "valorant", "aim,movement");
+        RagIngestionResult result = ragIngestionService.upload(testFile, "valorant", "aim,movement", null);
 
         // Assert: Check upload result
         assertNotNull(result.getFileId());
@@ -140,7 +140,7 @@ class RagIngestionIntegrationTest {
                 "text/markdown",
                 TEST_CONTENT.getBytes(StandardCharsets.UTF_8)
         );
-        RagIngestionResult uploadResult = ragIngestionService.upload(testFile, "valorant", null);
+        RagIngestionResult uploadResult = ragIngestionService.upload(testFile, "valorant", null, null);
         String fileId = uploadResult.getFileId();
         int chunkCountBeforeDelete = uploadResult.getChunkCount();
 
@@ -188,8 +188,8 @@ class RagIngestionIntegrationTest {
         );
 
         // Act: Upload both files
-        RagIngestionResult result1 = ragIngestionService.upload(file1, "valorant", "movement");
-        RagIngestionResult result2 = ragIngestionService.upload(file2, "cs2", "crosshair");
+        RagIngestionResult result1 = ragIngestionService.upload(file1, "valorant", "movement", null);
+        RagIngestionResult result2 = ragIngestionService.upload(file2, "cs2", "crosshair", null);
 
         String fileId1 = result1.getFileId();
         String fileId2 = result2.getFileId();
@@ -239,24 +239,22 @@ class RagIngestionIntegrationTest {
 
                 ResponseStatusException ex = assertThrows(
                                 ResponseStatusException.class,
-                                () -> ragIngestionService.upload(testFile, "", null)
+                                () -> ragIngestionService.upload(testFile, "", null, null)
                 );
                 assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
         }
 
         @Test
-        void testUploadRejectsUnsupportedGameKey() {
+        void testUploadAllowsCustomGameKey() {
                 MultipartFile testFile = new MockMultipartFile(
                                 "file",
-                                "unsupported-game-key.md",
+                                "custom-game-key.md",
                                 "text/markdown",
                                 TEST_CONTENT.getBytes(StandardCharsets.UTF_8)
                 );
 
-                ResponseStatusException ex = assertThrows(
-                                ResponseStatusException.class,
-                                () -> ragIngestionService.upload(testFile, "dota2", null)
-                );
-                assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+                RagIngestionResult result = ragIngestionService.upload(testFile, "rusty-lake", null, null);
+                assertNotNull(result.getFileId());
+                assertEquals("READY", result.getStatus());
         }
 }

@@ -30,15 +30,17 @@ public class KnowledgeBaseController {
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public RagIngestionResult upload(@RequestPart("file") MultipartFile file,
                                      @RequestPart("gameKey") String gameKey,
-                                     @RequestPart(value = "tags", required = false) String tags) {
-        return ragIngestionService.upload(file, gameKey, tags);
+                                     @RequestPart(value = "tags", required = false) String tags,
+                                     @RequestPart(value = "customGameNames", required = false) String customGameNames) {
+        return ragIngestionService.upload(file, gameKey, tags, customGameNames);
     }
 
     @PostMapping(value = "/upload/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public RagBatchIngestionResult uploadBatch(@RequestPart("files") MultipartFile[] files,
                                                @RequestPart("gameKey") String gameKey,
-                                               @RequestPart(value = "tags", required = false) String tags) {
-        return ragIngestionService.uploadBatch(files, gameKey, tags);
+                                               @RequestPart(value = "tags", required = false) String tags,
+                                               @RequestPart(value = "customGameNames", required = false) String customGameNames) {
+        return ragIngestionService.uploadBatch(files, gameKey, tags, customGameNames);
     }
 
     @GetMapping("/files")

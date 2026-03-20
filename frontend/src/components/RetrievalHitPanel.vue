@@ -45,7 +45,11 @@ function scoreText(score: number): string {
   background: var(--panel);
   padding: 12px;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .head {
@@ -77,7 +81,7 @@ function scoreText(score: number): string {
 .list {
   display: grid;
   gap: 8px;
-  max-height: 260px;
+  max-height: none;
   overflow: auto;
 }
 

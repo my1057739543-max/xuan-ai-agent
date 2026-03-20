@@ -30,7 +30,8 @@ class AgentServiceTest {
                 scriptedAgent(),
                 new ToolRegistry(new TimeGetTool(), new TerminateTool(), new WebSearchTool("https://api.tavily.com/search", "", 5, 15), Optional.empty()),
                 defaultRagRetrievalService(),
-                defaultRagProperties()
+                defaultRagProperties(),
+                new com.xuan.xuanopenagent.service.CustomGameKeyRegistry()
         );
 
         List<String> tools = agentService.listTools();
@@ -47,7 +48,8 @@ class AgentServiceTest {
                 scriptedAgent(),
                 new ToolRegistry(new TimeGetTool(), new TerminateTool(), new WebSearchTool("https://api.tavily.com/search", "", 5, 15), Optional.empty()),
                 defaultRagRetrievalService(),
-                defaultRagProperties()
+                defaultRagProperties(),
+                new com.xuan.xuanopenagent.service.CustomGameKeyRegistry()
         );
 
         ChatRequest request = new ChatRequest();

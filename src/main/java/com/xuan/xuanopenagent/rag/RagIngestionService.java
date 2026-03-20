@@ -8,6 +8,7 @@ import com.xuan.xuanopenagent.rag.model.RagIngestionResult;
 import com.xuan.xuanopenagent.rag.model.RagBatchIngestionResult;
 import com.xuan.xuanopenagent.rag.model.KnowledgeFileStatus;
 import com.xuan.xuanopenagent.rag.store.KnowledgeFileRepository;
+import com.xuan.xuanopenagent.service.CustomGameKeyRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -41,20 +42,23 @@ public class RagIngestionService {
     private final DocumentReaderRouter documentReaderRouter;
     private final DocumentChunker documentChunker;
     private final VectorStore vectorStore;
+    private final CustomGameKeyRegistry customGameKeyRegistry;
 
     public RagIngestionService(RagProperties ragProperties,
                                KnowledgeFileRepository repository,
                                DocumentReaderRouter documentReaderRouter,
                                DocumentChunker documentChunker,
-                               VectorStore vectorStore) {
+                               VectorStore vectorStore,
+                               CustomGameKeyRegistry customGameKeyRegistry) {
         this.ragProperties = ragProperties;
         this.repository = repository;
         this.documentReaderRouter = documentReaderRouter;
         this.documentChunker = documentChunker;
         this.vectorStore = vectorStore;
+        this.customGameKeyRegistry = customGameKeyRegistry;
     }
 
-    public RagIngestionResult upload(MultipartFile file, String gameKey, String tags) {
+    public RagIngestionResult upload(MultipartFile file, String gameKey, String tags, String customGameNames) {
         validate(file);
         String normalizedGameKey = normalizeAndValidateGameKey(gameKey);
         List<String> normalizedTags = normalizeTags(tags);
@@ -104,6 +108,16 @@ public class RagIngestionService {
 
             addChunksInBatches(chunks, fileId);
             repository.markReady(fileId, chunks.size());
+            
+            // 注册用户输入的自定义游戏别名
+            if (customGameNames != null && !customGameNames.isBlank()) {
+                String[] aliases = customGameNames.split("[,\\s]+");
+                if (aliases.length > 0) {
+                    customGameKeyRegistry.registerCustomGameNames(normalizedGameKey, aliases);
+                    log.info("[RAG] custom game names registered for gameKey={}: {}", normalizedGameKey, String.join(", ", aliases));
+                }
+            }
+            
             log.info("[RAG] fileId={} ingested. documents={} chunks={}", fileId, documents.size(), chunks.size());
 
             return new RagIngestionResult(fileId, KnowledgeFileStatus.READY.name(), documents.size(), chunks.size());
@@ -116,7 +130,7 @@ public class RagIngestionService {
         }
     }
 
-    public RagBatchIngestionResult uploadBatch(MultipartFile[] files, String gameKey, String tags) {
+    public RagBatchIngestionResult uploadBatch(MultipartFile[] files, String gameKey, String tags, String customGameNames) {
         if (files == null || files.length == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No files provided");
         }
@@ -132,7 +146,7 @@ public class RagIngestionService {
             item.setFileName(file == null ? "" : file.getOriginalFilename());
 
             try {
-                RagIngestionResult result = upload(file, gameKey, tags);
+                RagIngestionResult result = upload(file, gameKey, tags, customGameNames);
                 item.setSuccess(true);
                 item.setFileId(result.getFileId());
                 item.setStatus(result.getStatus());
@@ -243,12 +257,8 @@ public class RagIngestionService {
 
         String normalized = gameKey.trim().toLowerCase(Locale.ROOT);
         String mapped = mapAliasToGameKey(normalized);
-        List<String> supported = ragProperties.getSupportedGameKeys().stream()
-                .map(it -> it.toLowerCase(Locale.ROOT).trim())
-                .toList();
-        if (!supported.contains(mapped)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Unsupported gameKey: " + normalized + ", allowed=" + supported);
+        if (mapped.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "gameKey is required");
         }
         return mapped;
     }

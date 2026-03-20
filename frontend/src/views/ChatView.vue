@@ -172,10 +172,10 @@ async function loadKnowledgeFiles(): Promise<void> {
   }
 }
 
-async function handleUpload(files: File[], gameKey: string, tags?: string): Promise<void> {
+async function handleUpload(files: File[], gameKey: string, tags?: string, customGameNames?: string): Promise<void> {
   uploading.value = true
   try {
-    const result = await uploadKnowledgeFiles(files, gameKey, tags)
+    const result = await uploadKnowledgeFiles(files, gameKey, tags, customGameNames)
     await loadKnowledgeFiles()
     addOrUpdateAssistantMessage(
       `批量上传完成：成功 ${result.successCount}，失败 ${result.failedCount}，总计 ${result.totalFiles}`,
@@ -450,9 +450,16 @@ h1 {
 
 .kb-side {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
   position: sticky;
   top: 14px;
+  height: clamp(420px, 72vh, 760px);
+  overflow: hidden;
+}
+
+.kb-side > * {
+  min-height: 0;
 }
 
 @media (max-width: 1180px) {
@@ -463,6 +470,13 @@ h1 {
   .kb-side {
     position: static;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    height: auto;
+    overflow: visible;
+  }
+
+  .kb-side > * {
+    height: auto;
   }
 }
 
@@ -490,6 +504,7 @@ h1 {
 
   .kb-side {
     grid-template-columns: 1fr;
+    height: auto;
   }
 }
 </style>
