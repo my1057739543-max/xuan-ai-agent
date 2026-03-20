@@ -4,6 +4,7 @@ public class RetrievalHit {
 
     private String fileId;
     private String fileName;
+    private String gameKey;
     private int chunkIndex;
     private String sourceType;
     private double score;
@@ -23,6 +24,14 @@ public class RetrievalHit {
 
     public void setFileName(String fileName) {
         this.fileName = fileName;
+    }
+
+    public String getGameKey() {
+        return gameKey;
+    }
+
+    public void setGameKey(String gameKey) {
+        this.gameKey = gameKey;
     }
 
     public int getChunkIndex() {

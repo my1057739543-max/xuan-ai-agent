@@ -11,8 +11,8 @@ class ToolRegistryTest {
     private final ToolRegistry toolRegistry = new ToolRegistry(
             new TimeGetTool(),
             new TerminateTool(),
-        new WebSearchTool(),
-        Optional.empty()
+            new WebSearchTool("https://api.tavily.com/search", "", 5, 15),
+            Optional.empty()
     );
 
     @Test
@@ -51,8 +51,8 @@ class ToolRegistryTest {
         System.out.println("[TEST-START] shouldInvokeWebSearchPlaceholder");
         String result = toolRegistry.invoke("web_search", "spring ai react");
         System.out.println("[TOOL-RESULT] web_search => " + result);
-        assertThat(result).contains("placeholder");
-        assertThat(result).contains("spring ai react");
+        assertThat(result).contains("status");
+        assertThat(result).contains("api-key is not configured");
         System.out.println("[TEST-PASS] shouldInvokeWebSearchPlaceholder");
     }
 }

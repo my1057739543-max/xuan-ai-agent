@@ -6,28 +6,30 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (event: 'upload', file: File): void
+  (event: 'upload', files: File[], gameKey: string, tags?: string): void
 }>()
 
 const fileInput = ref<HTMLInputElement | null>(null)
-const selectedFileName = ref('')
-const selectedFile = ref<File | null>(null)
+const selectedFileNames = ref<string[]>([])
+const selectedFiles = ref<File[]>([])
+const selectedGameKey = ref('valorant')
+const selectedTags = ref('')
 
 function onSelectFile(event: Event): void {
   const target = event.target as HTMLInputElement
-  const file = target.files?.[0] ?? null
-  selectedFile.value = file
-  selectedFileName.value = file?.name ?? ''
+  const files = Array.from(target.files ?? [])
+  selectedFiles.value = files
+  selectedFileNames.value = files.map((file) => file.name)
 }
 
 function onUpload(): void {
-  if (!selectedFile.value || props.uploading) {
+  if (selectedFiles.value.length === 0 || props.uploading) {
     return
   }
 
-  emit('upload', selectedFile.value)
-  selectedFile.value = null
-  selectedFileName.value = ''
+  emit('upload', selectedFiles.value, selectedGameKey.value, selectedTags.value)
+  selectedFiles.value = []
+  selectedFileNames.value = []
   if (fileInput.value) {
     fileInput.value.value = ''
   }
@@ -42,13 +44,34 @@ function onUpload(): void {
     </div>
 
     <div class="picker-row">
-      <input ref="fileInput" class="file-input" type="file" accept=".txt,.md,.pdf" @change="onSelectFile" />
-      <button class="upload-btn" :disabled="!selectedFile || uploading" @click="onUpload">
+      <input ref="fileInput" class="file-input" type="file" multiple accept=".txt,.md,.pdf" @change="onSelectFile" />
+      <button class="upload-btn" :disabled="selectedFiles.length === 0 || uploading" @click="onUpload">
         {{ uploading ? '上传中...' : '上传' }}
       </button>
     </div>
 
-    <p class="selected-name">{{ selectedFileName || '未选择文件' }}</p>
+    <label class="game-row">
+      <span>gameKey</span>
+      <select v-model="selectedGameKey" class="game-select">
+        <option value="valorant">valorant</option>
+        <option value="cs2">cs2</option>
+        <option value="apex">apex</option>
+        <option value="lol">lol</option>
+      </select>
+    </label>
+
+    <label class="game-row">
+      <span>tags</span>
+      <input
+        v-model="selectedTags"
+        class="tag-input"
+        type="text"
+        placeholder="如: aim,movement,counter-strafe"
+      />
+    </label>
+
+    <p class="selected-name">{{ selectedFiles.length > 0 ? `已选择 ${selectedFiles.length} 个文件` : '未选择文件' }}</p>
+    <p v-if="selectedFileNames.length > 0" class="selected-name">{{ selectedFileNames.join(' | ') }}</p>
   </section>
 </template>
 
@@ -116,5 +139,30 @@ function onUpload(): void {
   font-size: 12px;
   color: var(--ink-soft);
   word-break: break-all;
+}
+
+.game-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.game-select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  color: var(--ink);
+  padding: 5px 8px;
+}
+
+.tag-input {
+  min-width: 230px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  color: var(--ink);
+  padding: 5px 8px;
 }
 </style>

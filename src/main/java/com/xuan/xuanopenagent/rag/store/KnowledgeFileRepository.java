@@ -26,6 +26,8 @@ public class KnowledgeFileRepository {
         jdbcTemplate.execute("""
                 create table if not exists kb_file (
                     file_id varchar(64) primary key,
+                    game_key varchar(50) not null,
+                    tags text,
                     original_name varchar(255) not null,
                     stored_name varchar(255) not null,
                     extension varchar(20) not null,
@@ -38,17 +40,22 @@ public class KnowledgeFileRepository {
                     updated_at timestamp not null
                 )
                 """);
+
+            jdbcTemplate.execute("alter table kb_file add column if not exists game_key varchar(50)");
+            jdbcTemplate.execute("alter table kb_file add column if not exists tags text");
     }
 
     public void insertProcessing(KnowledgeFile file) {
         LocalDateTime now = LocalDateTime.now();
         jdbcTemplate.update("""
                         insert into kb_file (
-                            file_id, original_name, stored_name, extension, mime_type, size_bytes,
+                            file_id, game_key, tags, original_name, stored_name, extension, mime_type, size_bytes,
                             status, error_message, document_count, created_at, updated_at
-                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 file.getFileId(),
+                file.getGameKey(),
+                file.getTags(),
                 file.getOriginalName(),
                 file.getStoredName(),
                 file.getExtension(),
@@ -90,8 +97,8 @@ public class KnowledgeFileRepository {
 
     public List<KnowledgeFile> findAll() {
         return jdbcTemplate.query("""
-                select file_id, original_name, stored_name, extension, mime_type, size_bytes,
-                       status, error_message, document_count, created_at, updated_at
+                select file_id, game_key, tags, original_name, stored_name, extension, mime_type, size_bytes,
+                     status, error_message, document_count, created_at, updated_at
                 from kb_file
                 order by created_at desc
                 """, this::mapRow);
@@ -99,8 +106,8 @@ public class KnowledgeFileRepository {
 
     public Optional<KnowledgeFile> findById(String fileId) {
         List<KnowledgeFile> result = jdbcTemplate.query("""
-                select file_id, original_name, stored_name, extension, mime_type, size_bytes,
-                       status, error_message, document_count, created_at, updated_at
+                select file_id, game_key, tags, original_name, stored_name, extension, mime_type, size_bytes,
+                     status, error_message, document_count, created_at, updated_at
                 from kb_file
                 where file_id = ?
                 """, this::mapRow, fileId);
@@ -114,6 +121,8 @@ public class KnowledgeFileRepository {
     private KnowledgeFile mapRow(ResultSet rs, int rowNum) throws SQLException {
         KnowledgeFile file = new KnowledgeFile();
         file.setFileId(rs.getString("file_id"));
+        file.setGameKey(rs.getString("game_key"));
+        file.setTags(rs.getString("tags"));
         file.setOriginalName(rs.getString("original_name"));
         file.setStoredName(rs.getString("stored_name"));
         file.setExtension(rs.getString("extension"));

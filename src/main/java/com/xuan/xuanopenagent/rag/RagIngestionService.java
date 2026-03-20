@@ -5,6 +5,7 @@ import com.xuan.xuanopenagent.rag.document.DocumentChunker;
 import com.xuan.xuanopenagent.rag.document.DocumentReaderRouter;
 import com.xuan.xuanopenagent.rag.model.KnowledgeFile;
 import com.xuan.xuanopenagent.rag.model.RagIngestionResult;
+import com.xuan.xuanopenagent.rag.model.RagBatchIngestionResult;
 import com.xuan.xuanopenagent.rag.model.KnowledgeFileStatus;
 import com.xuan.xuanopenagent.rag.store.KnowledgeFileRepository;
 import org.slf4j.Logger;
@@ -22,10 +23,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.ArrayList;
 
 @Service
 public class RagIngestionService {
@@ -50,8 +54,10 @@ public class RagIngestionService {
         this.vectorStore = vectorStore;
     }
 
-    public RagIngestionResult upload(MultipartFile file) {
+    public RagIngestionResult upload(MultipartFile file, String gameKey, String tags) {
         validate(file);
+        String normalizedGameKey = normalizeAndValidateGameKey(gameKey);
+        List<String> normalizedTags = normalizeTags(tags);
 
         String extension = extensionOf(file.getOriginalFilename());
         String fileId = UUID.randomUUID().toString().replace("-", "");
@@ -68,6 +74,8 @@ public class RagIngestionService {
 
         KnowledgeFile entity = new KnowledgeFile();
         entity.setFileId(fileId);
+        entity.setGameKey(normalizedGameKey);
+        entity.setTags(String.join(",", normalizedTags));
         entity.setOriginalName(file.getOriginalFilename());
         entity.setStoredName(storedName);
         entity.setExtension(extension);
@@ -82,22 +90,72 @@ public class RagIngestionService {
                 throw new IllegalStateException("Reader returned no documents");
             }
 
-            List<Document> chunks = documentChunker.chunk(documents, fileId, file.getOriginalFilename(), extension);
+            List<Document> chunks = documentChunker.chunk(
+                    documents,
+                    fileId,
+                    file.getOriginalFilename(),
+                    extension,
+                    normalizedGameKey,
+                    normalizedTags
+            );
             if (chunks.isEmpty()) {
                 throw new IllegalStateException("Chunker returned no chunks");
             }
 
-            vectorStore.add(chunks);
+            addChunksInBatches(chunks, fileId);
             repository.markReady(fileId, chunks.size());
             log.info("[RAG] fileId={} ingested. documents={} chunks={}", fileId, documents.size(), chunks.size());
 
             return new RagIngestionResult(fileId, KnowledgeFileStatus.READY.name(), documents.size(), chunks.size());
         } catch (Exception ex) {
             String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+            cleanupVectorsOnFailure(fileId);
             repository.markFailed(fileId, reason);
             log.error("[RAG] fileId={} read failed", fileId, ex);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File read failed: " + reason, ex);
         }
+    }
+
+    public RagBatchIngestionResult uploadBatch(MultipartFile[] files, String gameKey, String tags) {
+        if (files == null || files.length == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No files provided");
+        }
+
+        RagBatchIngestionResult batchResult = new RagBatchIngestionResult();
+        batchResult.setTotalFiles(files.length);
+
+        List<RagBatchIngestionResult.Item> items = new ArrayList<>(files.length);
+        int successCount = 0;
+
+        for (MultipartFile file : files) {
+            RagBatchIngestionResult.Item item = new RagBatchIngestionResult.Item();
+            item.setFileName(file == null ? "" : file.getOriginalFilename());
+
+            try {
+                RagIngestionResult result = upload(file, gameKey, tags);
+                item.setSuccess(true);
+                item.setFileId(result.getFileId());
+                item.setStatus(result.getStatus());
+                item.setDocumentCount(result.getDocumentCount());
+                item.setChunkCount(result.getChunkCount());
+                successCount++;
+            } catch (ResponseStatusException ex) {
+                item.setSuccess(false);
+                item.setStatus("FAILED");
+                item.setErrorMessage(ex.getReason());
+            } catch (Exception ex) {
+                item.setSuccess(false);
+                item.setStatus("FAILED");
+                item.setErrorMessage(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+            }
+
+            items.add(item);
+        }
+
+        batchResult.setItems(items);
+        batchResult.setSuccessCount(successCount);
+        batchResult.setFailedCount(files.length - successCount);
+        return batchResult;
     }
 
     public List<KnowledgeFile> listFiles() {
@@ -176,5 +234,75 @@ public class RagIngestionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File extension is empty");
         }
         return ext;
+    }
+
+    private String normalizeAndValidateGameKey(String gameKey) {
+        if (gameKey == null || gameKey.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "gameKey is required");
+        }
+
+        String normalized = gameKey.trim().toLowerCase(Locale.ROOT);
+        String mapped = mapAliasToGameKey(normalized);
+        List<String> supported = ragProperties.getSupportedGameKeys().stream()
+                .map(it -> it.toLowerCase(Locale.ROOT).trim())
+                .toList();
+        if (!supported.contains(mapped)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unsupported gameKey: " + normalized + ", allowed=" + supported);
+        }
+        return mapped;
+    }
+
+    private String mapAliasToGameKey(String key) {
+        if (ragProperties.getGameAliasMap() == null || ragProperties.getGameAliasMap().isEmpty()) {
+            return key;
+        }
+        for (Map.Entry<String, String> entry : ragProperties.getGameAliasMap().entrySet()) {
+            String alias = entry.getKey() == null ? "" : entry.getKey().trim().toLowerCase(Locale.ROOT);
+            if (!alias.isBlank() && alias.equals(key)) {
+                String mapped = entry.getValue() == null ? "" : entry.getValue().trim().toLowerCase(Locale.ROOT);
+                return mapped.isBlank() ? key : mapped;
+            }
+        }
+        return key;
+    }
+
+    private List<String> normalizeTags(String tags) {
+        if (tags == null || tags.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(tags.split(","))
+                .map(String::trim)
+                .filter(it -> !it.isBlank())
+                .map(it -> it.toLowerCase(Locale.ROOT))
+                .distinct()
+                .toList();
+    }
+
+    private void addChunksInBatches(List<Document> chunks, String fileId) {
+        int batchLimit = Math.max(1, ragProperties.getEmbeddingBatchSize());
+        int total = chunks.size();
+        if (total <= batchLimit) {
+            vectorStore.add(chunks);
+            return;
+        }
+
+        int batches = (total + batchLimit - 1) / batchLimit;
+        log.info("[RAG] fileId={} embedding in batches. totalChunks={} batchSize={} batches={}",
+                fileId, total, batchLimit, batches);
+
+        for (int start = 0; start < total; start += batchLimit) {
+            int end = Math.min(start + batchLimit, total);
+            vectorStore.add(chunks.subList(start, end));
+        }
+    }
+
+    private void cleanupVectorsOnFailure(String fileId) {
+        try {
+            FilterExpressionBuilder builder = new FilterExpressionBuilder();
+            vectorStore.delete(builder.eq("fileId", fileId).build());
+        } catch (Exception cleanupEx) {
+            log.warn("[RAG] fileId={} cleanup failed after ingestion error", fileId, cleanupEx);
+        }
     }
 }

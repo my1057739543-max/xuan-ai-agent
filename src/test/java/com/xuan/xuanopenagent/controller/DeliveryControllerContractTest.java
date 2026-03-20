@@ -3,6 +3,8 @@ package com.xuan.xuanopenagent.controller;
 import com.xuan.xuanopenagent.agent.XuanAgent;
 import com.xuan.xuanopenagent.agent.model.AgentContext;
 import com.xuan.xuanopenagent.config.AgentProperties;
+import com.xuan.xuanopenagent.config.RagProperties;
+import com.xuan.xuanopenagent.rag.RagRetrievalService;
 import com.xuan.xuanopenagent.service.AgentService;
 import com.xuan.xuanopenagent.tools.TerminateTool;
 import com.xuan.xuanopenagent.tools.TimeGetTool;
@@ -19,9 +21,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Optional;
+
+import static org.mockito.Mockito.mock;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -78,7 +83,12 @@ class DeliveryControllerContractTest {
 
         @Bean
         ToolRegistry toolRegistry() {
-            return new ToolRegistry(new TimeGetTool(), new TerminateTool(), new WebSearchTool(), Optional.empty());
+            return new ToolRegistry(
+                    new TimeGetTool(),
+                    new TerminateTool(),
+                    new WebSearchTool("https://api.tavily.com/search", "", 5, 15),
+                    Optional.empty()
+            );
         }
 
         @Bean
@@ -112,8 +122,22 @@ class DeliveryControllerContractTest {
         }
 
         @Bean
-        AgentService agentService(XuanAgent xuanAgent, ToolRegistry toolRegistry) {
-            return new AgentService(xuanAgent, toolRegistry);
+        RagProperties ragProperties() {
+            return new RagProperties();
+        }
+
+        @Bean
+        RagRetrievalService ragRetrievalService(RagProperties ragProperties) {
+            VectorStore vectorStore = mock(VectorStore.class);
+            return new RagRetrievalService(vectorStore, ragProperties);
+        }
+
+        @Bean
+        AgentService agentService(XuanAgent xuanAgent,
+                                  ToolRegistry toolRegistry,
+                                  RagRetrievalService ragRetrievalService,
+                                  RagProperties ragProperties) {
+            return new AgentService(xuanAgent, toolRegistry, ragRetrievalService, ragProperties);
         }
     }
 }

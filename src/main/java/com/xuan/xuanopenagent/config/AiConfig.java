@@ -15,4 +15,9 @@ public class AiConfig {
     public ChatClient xuanAgentChatClient(@Qualifier("deepSeekChatModel") ChatModel chatModel) {
         return ChatClient.builder(chatModel).build();
     }
+
+    @Bean("chunkingChatClient")
+    public ChatClient chunkingChatClient(@Qualifier("dashScopeChatModel") ChatModel chatModel) {
+        return ChatClient.builder(chatModel).build();
+    }
 }

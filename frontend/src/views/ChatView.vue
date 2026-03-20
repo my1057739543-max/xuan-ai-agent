@@ -6,7 +6,7 @@ import ChatMessageList from '../components/ChatMessageList.vue'
 import KnowledgeBasePanel from '../components/KnowledgeBasePanel.vue'
 import RetrievalHitPanel from '../components/RetrievalHitPanel.vue'
 import { streamChat } from '../services/chatApi'
-import { deleteKnowledgeFile, listKnowledgeFiles, uploadKnowledgeFile } from '../services/knowledgeApi'
+import { deleteKnowledgeFile, listKnowledgeFiles, uploadKnowledgeFiles } from '../services/knowledgeApi'
 import type { AgentEvent, ChatMessage, ChatRequest, KnowledgeFile, RetrievalHit, StreamStatus } from '../types/chat'
 
 const pendingText = ref('')
@@ -172,11 +172,15 @@ async function loadKnowledgeFiles(): Promise<void> {
   }
 }
 
-async function handleUpload(file: File): Promise<void> {
+async function handleUpload(files: File[], gameKey: string, tags?: string): Promise<void> {
   uploading.value = true
   try {
-    await uploadKnowledgeFile(file)
+    const result = await uploadKnowledgeFiles(files, gameKey, tags)
     await loadKnowledgeFiles()
+    addOrUpdateAssistantMessage(
+      `批量上传完成：成功 ${result.successCount}，失败 ${result.failedCount}，总计 ${result.totalFiles}`,
+      'replace',
+    )
   } catch (error) {
     addOrUpdateAssistantMessage(`上传失败：${String(error)}`, 'replace')
   } finally {
@@ -220,6 +224,7 @@ async function sendMessage(): Promise<void> {
     options: {
       useKnowledgeBase: useKnowledgeBase.value,
       fileIdFilter: fileIdFilter.value || undefined,
+      gameKey: knowledgeFiles.value.find((item) => item.fileId === fileIdFilter.value)?.gameKey || undefined,
     },
   }
 

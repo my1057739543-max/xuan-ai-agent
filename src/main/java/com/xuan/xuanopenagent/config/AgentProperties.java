@@ -21,6 +21,9 @@ public class AgentProperties {
     @NotBlank
     private String modelName = "deepseek-chat";
 
+    @NotBlank
+    private String systemPrompt = "你是一个专职游戏技巧助手，仅回答游戏相关知识与训练方法。";
+
     public int getMaxSteps() {
         return maxSteps;
     }
@@ -51,5 +54,13 @@ public class AgentProperties {
 
     public void setModelName(String modelName) {
         this.modelName = modelName;
+    }
+
+    public String getSystemPrompt() {
+        return systemPrompt;
+    }
+
+    public void setSystemPrompt(String systemPrompt) {
+        this.systemPrompt = systemPrompt;
     }
 }

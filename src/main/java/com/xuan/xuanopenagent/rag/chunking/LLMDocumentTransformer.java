@@ -1,0 +1,336 @@
+package com.xuan.xuanopenagent.rag.chunking;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.document.DocumentTransformer;
+import org.springframework.ai.chat.client.ChatClient;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * LLM 优先切片 DocumentTransformer 实现。
+ * 
+ * 策略：
+ * 1. 优先使用 LLM 进行语义切片，获取结构化输出
+ * 2. 校验输出 Schema，检查业务规则
+ * 3. 失败或违规时自动回退到规则切片
+ * 4. 记录 chunkMode=llm 或 rule
+ */
+public class LLMDocumentTransformer implements DocumentTransformer {
+
+    private final ChatClient chatClient;
+    private final ChunkingConfig config;
+    private final ObjectMapper objectMapper;
+    private final RuleBasedSplitter ruleSplitter;
+
+    // 事件回调接口，用于发送 chunk_started、chunk_fallback 等事件
+    public interface ChunkingEventListener {
+        void onChunkStarted(String fileId, String fileName);
+        void onChunkLLMCompleted(String fileId, int chunkCount, long latencyMs);
+        void onChunkSchemaValidated(String fileId, int validChunks, int invalidChunks);
+        void onChunkFallback(String fileId, String reason);
+        void onChunkCompleted(String fileId, int totalChunks, String mode, long totalLatencyMs);
+    }
+
+    private ChunkingEventListener eventListener;
+
+    public LLMDocumentTransformer(ChatClient chatClient, ChunkingConfig config) {
+        this.chatClient = chatClient;
+        this.config = config;
+        this.objectMapper = new ObjectMapper();
+        this.ruleSplitter = new RuleBasedSplitter(config);
+    }
+
+    public LLMDocumentTransformer(ChatClient chatClient, ChunkingConfig config, ChunkingEventListener eventListener) {
+        this(chatClient, config);
+        this.eventListener = eventListener;
+    }
+
+    @Override
+    public List<Document> apply(List<Document> documents) {
+        long totalStartTime = System.currentTimeMillis();
+        List<Document> allChunks = new ArrayList<>();
+
+        for (Document doc : documents) {
+            String fileId = doc.getMetadata().getOrDefault("fileId", "unknown").toString();
+            String fileName = doc.getMetadata().getOrDefault("fileName", "unknown").toString();
+            
+            // 发送 chunk_started 事件
+            if (eventListener != null) {
+                eventListener.onChunkStarted(fileId, fileName);
+            }
+
+            List<Document> chunks = chunkDocument(doc);
+            allChunks.addAll(chunks);
+        }
+
+        long totalLatency = System.currentTimeMillis() - totalStartTime;
+        return allChunks;
+    }
+
+    /**
+     * 对单个文档进行切片。
+     */
+    private List<Document> chunkDocument(Document doc) {
+        long startTime = System.currentTimeMillis();
+        String fileId = doc.getMetadata().getOrDefault("fileId", "unknown").toString();
+        String fileName = doc.getMetadata().getOrDefault("fileName", "unknown").toString();
+
+        // 根据策略选择切片方式
+        if ("llm_first".equalsIgnoreCase(config.getStrategy()) && config.isLlmEnabled()) {
+            try {
+                List<Document> chunks = chunkWithLLM(doc);
+                long latency = System.currentTimeMillis() - startTime;
+                
+                if (eventListener != null) {
+                    eventListener.onChunkLLMCompleted(fileId, chunks.size(), latency);
+                }
+                
+                return chunks;
+            } catch (Exception e) {
+                // LLM 调用失败，检查是否回退
+                if (config.isFallbackToRule()) {
+                    if (eventListener != null) {
+                        eventListener.onChunkFallback(fileId, e.getMessage());
+                    }
+                    return chunkWithRules(doc);
+                } else {
+                    throw new RuntimeException("LLM chunking failed and fallback is disabled", e);
+                }
+            }
+        } else {
+            // 直接使用规则切片
+            return chunkWithRules(doc);
+        }
+    }
+
+    /**
+     * 使用 LLM 进行语义切片。
+     */
+    private List<Document> chunkWithLLM(Document doc) throws Exception {
+        String content = doc.getText();  // 使用 getText() 获取文档内容
+        String gameKey = config.getGameKey();
+
+        // 构建 LLM prompt
+        String prompt = buildChunkingPrompt(content, gameKey);
+
+        // 调用 LLM 获取结构化输出
+        String llmResponse = callLLMWithTimeout(prompt);
+
+        // 解析 JSON 响应
+        List<LLMChunkingSchema> schemas = parseChunkingResponse(llmResponse);
+
+        // 校验 Schema
+        List<LLMChunkingSchema> validSchemas = schemas.stream()
+                .filter(LLMChunkingSchema::isValid)
+                .collect(Collectors.toList());
+
+        if (eventListener != null) {
+            eventListener.onChunkSchemaValidated("unknown", validSchemas.size(), 
+                    schemas.size() - validSchemas.size());
+        }
+
+        if (validSchemas.isEmpty()) {
+            throw new IllegalStateException("No valid chunks generated by LLM");
+        }
+
+        // 将 Schema 转换为 Document
+        List<Document> chunks = new ArrayList<>();
+        for (LLMChunkingSchema schema : validSchemas) {
+            Document chunk = createChunkDocument(schema, doc);
+            chunks.add(chunk);
+        }
+
+        return chunks;
+    }
+
+    /**
+     * 使用规则切片作为回退方案。
+     */
+    private List<Document> chunkWithRules(Document doc) {
+        return ruleSplitter.split(doc);
+    }
+
+    /**
+     * 构建 LLM 切片的 prompt。
+     */
+    private String buildChunkingPrompt(String content, String gameKey) {
+        return String.format("""
+                你是一个游戏教学内容切片专家。你的任务是将以下游戏知识内容切分成多个独立的技巧单元。
+                
+                **重要规则：**
+                1. 每个技巧单元必须是完整的、独立可学习的
+                2. 不得跨游戏混切，所有切片的 gameKey 必须是: %s
+                3. 输出必须是严格的 JSON 数组，每个元素包含以下字段：
+                   - title: 技巧名称（字符串）
+                   - gameKey: 游戏标识（必须是 "%s"）
+                   - topic: 所属话题（字符串）
+                   - steps: 执行步骤数组（数组，可null）
+                   - commonMistakes: 常见错误数组（数组，可null）
+                   - drillPlan: 训练计划（字符串，可null）
+                   - rawText: 该技巧单元的原始文本内容（字符串，必填）
+                4. steps 和 commonMistakes 至少一个非空
+                5. 每个 chunk 的 rawText 长度应该在 100-1000 字符之间
+                6. 不要输出任何 JSON 前后缀的自然语言说明，只输出 JSON 数组
+                
+                **待切片内容：**
+                %s
+                
+                **输出格式（JSON 数组）：**
+                [
+                  {
+                    "title": "...",
+                    "gameKey": "%s",
+                    "topic": "...",
+                    "steps": [...],
+                    "commonMistakes": [...],
+                    "drillPlan": "...",
+                    "rawText": "..."
+                  },
+                  ...
+                ]
+                """, gameKey, gameKey, content, gameKey);
+    }
+
+    /**
+     * 调用 LLM 获取响应，带超时控制。
+     */
+    private String callLLMWithTimeout(String prompt) throws Exception {
+        long timeoutMs = config.getLlmTimeoutSeconds() * 1000;
+        
+        // 使用 ChatClient 调用，需要配置为 JSON 模式
+        String response = chatClient.prompt()
+                .system(sys -> sys.text("You are an expert at game knowledge chunking. Return Valid JSON only."))
+                .user(prompt)
+                .call()
+                .content();
+
+        if (response == null || response.trim().isEmpty()) {
+            throw new RuntimeException("LLM returned empty response");
+        }
+
+        return response;
+    }
+
+    /**
+     * 解析 LLM 返回的 JSON 响应。
+     */
+    private List<LLMChunkingSchema> parseChunkingResponse(String response) throws JsonProcessingException {
+        List<LLMChunkingSchema> schemas = new ArrayList<>();
+
+        // 去掉可能的 markdown 代码块标记
+        String cleanedResponse = response.trim();
+        if (cleanedResponse.startsWith("```json")) {
+            cleanedResponse = cleanedResponse.substring(7);
+        } else if (cleanedResponse.startsWith("```")) {
+            cleanedResponse = cleanedResponse.substring(3);
+        }
+        if (cleanedResponse.endsWith("```")) {
+            cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length() - 3);
+        }
+
+        // 解析 JSON 数组
+        JsonNode arrayNode = objectMapper.readTree(cleanedResponse.trim());
+        if (arrayNode.isArray()) {
+            for (JsonNode node : arrayNode) {
+                LLMChunkingSchema schema = objectMapper.treeToValue(node, LLMChunkingSchema.class);
+                if (schema != null) {
+                    schemas.add(schema);
+                }
+            }
+        }
+
+        return schemas;
+    }
+
+    /**
+     * 将切片 Schema 转换为 Document，保留元数据。
+     */
+    private Document createChunkDocument(LLMChunkingSchema schema, Document originalDoc) {
+        Map<String, Object> metadata = new HashMap<>(originalDoc.getMetadata());
+        
+        // 添加 LLM 切片相关元数据
+        metadata.put("chunkMode", "llm");
+        metadata.put("chunkTitle", schema.getTitle());
+        metadata.put("chunkTopic", schema.getTopic());
+        metadata.put("gameKey", schema.getGameKey());
+        
+        if (schema.getSteps() != null && !schema.getSteps().isEmpty()) {
+            metadata.put("steps", String.join("; ", schema.getSteps()));
+        }
+        
+        if (schema.getCommonMistakes() != null && !schema.getCommonMistakes().isEmpty()) {
+            metadata.put("commonMistakes", String.join("; ", schema.getCommonMistakes()));
+        }
+        
+        if (schema.getDrillPlan() != null && !schema.getDrillPlan().isEmpty()) {
+            metadata.put("drillPlan", schema.getDrillPlan());
+        }
+
+        // 创建新 Document，content 为 rawText
+        return new Document(schema.getRawText(), metadata);
+    }
+
+    /**
+     * 简单的规则切片实现（作为回退）。
+     * 这可以被替换为更复杂的实现，例如使用 TokenTextSplitter。
+     */
+    private static class RuleBasedSplitter {
+        private final ChunkingConfig config;
+
+        RuleBasedSplitter(ChunkingConfig config) {
+            this.config = config;
+        }
+
+        List<Document> split(Document doc) {
+            List<Document> chunks = new ArrayList<>();
+            String content = doc.getText();  // 使用 getText() 获取文档内容
+            int maxTokens = config.getMaxTokens();
+            
+            // 简单的字符数估算（1 token ≈ 4 个字符）
+            int maxChars = maxTokens * 4;
+            
+            if (content.length() <= maxChars) {
+                // 文档足够短，作为一个 chunk
+                Map<String, Object> metadata = new HashMap<>(doc.getMetadata());
+                metadata.put("chunkMode", "rule");
+                chunks.add(new Document(content, metadata));
+            } else {
+                // 分割文档
+                int index = 0;
+                int chunkIndex = 0;
+                
+                while (index < content.length()) {
+                    int endIndex = Math.min(index + maxChars, content.length());
+                    
+                    // 尝试在句子边界处切分
+                    if (endIndex < content.length()) {
+                        // 查找最后一个句号或换行
+                        int lastSentence = content.lastIndexOf("。", endIndex);
+                        int lastNewline = content.lastIndexOf("\n", endIndex);
+                        int cutPoint = Math.max(lastSentence, lastNewline);
+                        
+                        if (cutPoint > index) {
+                            endIndex = cutPoint + 1;
+                        }
+                    }
+                    
+                    String chunkText = content.substring(index, endIndex).trim();
+                    if (!chunkText.isEmpty()) {
+                        Map<String, Object> metadata = new HashMap<>(doc.getMetadata());
+                        metadata.put("chunkMode", "rule");
+                        metadata.put("chunkIndex", chunkIndex++);
+                        chunks.add(new Document(chunkText, metadata));
+                    }
+                    
+                    index = endIndex;
+                }
+            }
+            
+            return chunks;
+        }
+    }
+}

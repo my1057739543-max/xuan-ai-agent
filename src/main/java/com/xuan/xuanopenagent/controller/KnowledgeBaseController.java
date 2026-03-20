@@ -2,6 +2,7 @@ package com.xuan.xuanopenagent.controller;
 
 import com.xuan.xuanopenagent.rag.RagIngestionService;
 import com.xuan.xuanopenagent.rag.model.KnowledgeFile;
+import com.xuan.xuanopenagent.rag.model.RagBatchIngestionResult;
 import com.xuan.xuanopenagent.rag.model.RagIngestionResult;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -27,8 +28,17 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public RagIngestionResult upload(@RequestPart("file") MultipartFile file) {
-        return ragIngestionService.upload(file);
+    public RagIngestionResult upload(@RequestPart("file") MultipartFile file,
+                                     @RequestPart("gameKey") String gameKey,
+                                     @RequestPart(value = "tags", required = false) String tags) {
+        return ragIngestionService.upload(file, gameKey, tags);
+    }
+
+    @PostMapping(value = "/upload/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public RagBatchIngestionResult uploadBatch(@RequestPart("files") MultipartFile[] files,
+                                               @RequestPart("gameKey") String gameKey,
+                                               @RequestPart(value = "tags", required = false) String tags) {
+        return ragIngestionService.uploadBatch(files, gameKey, tags);
     }
 
     @GetMapping("/files")

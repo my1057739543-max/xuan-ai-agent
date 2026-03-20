@@ -6,10 +6,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -73,7 +75,7 @@ class RagIngestionIntegrationTest {
         );
 
         // Act: Upload file
-        RagIngestionResult result = ragIngestionService.upload(testFile);
+        RagIngestionResult result = ragIngestionService.upload(testFile, "valorant", "aim,movement");
 
         // Assert: Check upload result
         assertNotNull(result.getFileId());
@@ -99,6 +101,21 @@ class RagIngestionIntegrationTest {
                 Integer.class,
                 result.getFileId()
         );
+        Integer gameKeyCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vector_store WHERE metadata->>'fileId' = ? AND metadata->>'gameKey' = 'valorant'",
+                Integer.class,
+                result.getFileId()
+        );
+        assertEquals(result.getChunkCount(), gameKeyCount,
+                "All chunks should include gameKey=valorant metadata");
+
+        Integer tagsCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vector_store WHERE metadata->>'fileId' = ? AND metadata->'tags' IS NOT NULL",
+                Integer.class,
+                result.getFileId()
+        );
+        assertEquals(result.getChunkCount(), tagsCount, "All chunks should include tags metadata when provided");
+
         assertEquals(result.getChunkCount(), vectorCount,
                 "Should have " + result.getChunkCount() + " vectors in vector_store");
         System.out.println("[TEST] vector_store table: " + vectorCount + " vectors found with fileId=" + result.getFileId());
@@ -123,7 +140,7 @@ class RagIngestionIntegrationTest {
                 "text/markdown",
                 TEST_CONTENT.getBytes(StandardCharsets.UTF_8)
         );
-        RagIngestionResult uploadResult = ragIngestionService.upload(testFile);
+        RagIngestionResult uploadResult = ragIngestionService.upload(testFile, "valorant", null);
         String fileId = uploadResult.getFileId();
         int chunkCountBeforeDelete = uploadResult.getChunkCount();
 
@@ -171,8 +188,8 @@ class RagIngestionIntegrationTest {
         );
 
         // Act: Upload both files
-        RagIngestionResult result1 = ragIngestionService.upload(file1);
-        RagIngestionResult result2 = ragIngestionService.upload(file2);
+        RagIngestionResult result1 = ragIngestionService.upload(file1, "valorant", "movement");
+        RagIngestionResult result2 = ragIngestionService.upload(file2, "cs2", "crosshair");
 
         String fileId1 = result1.getFileId();
         String fileId2 = result2.getFileId();
@@ -210,4 +227,36 @@ class RagIngestionIntegrationTest {
         assertEquals(count2, count2After, "File 2 vectors should remain unchanged");
         System.out.println("[TEST] After deleting file1: File1 vectors=" + count1After + ", File2 vectors=" + count2After);
     }
+
+        @Test
+        void testUploadRejectsMissingGameKey() {
+                MultipartFile testFile = new MockMultipartFile(
+                                "file",
+                                "missing-game-key.md",
+                                "text/markdown",
+                                TEST_CONTENT.getBytes(StandardCharsets.UTF_8)
+                );
+
+                ResponseStatusException ex = assertThrows(
+                                ResponseStatusException.class,
+                                () -> ragIngestionService.upload(testFile, "", null)
+                );
+                assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        }
+
+        @Test
+        void testUploadRejectsUnsupportedGameKey() {
+                MultipartFile testFile = new MockMultipartFile(
+                                "file",
+                                "unsupported-game-key.md",
+                                "text/markdown",
+                                TEST_CONTENT.getBytes(StandardCharsets.UTF_8)
+                );
+
+                ResponseStatusException ex = assertThrows(
+                                ResponseStatusException.class,
+                                () -> ragIngestionService.upload(testFile, "dota2", null)
+                );
+                assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        }
 }

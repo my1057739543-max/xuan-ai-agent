@@ -4,18 +4,22 @@ import com.xuan.xuanopenagent.agent.XuanAgent;
 import com.xuan.xuanopenagent.agent.model.AgentContext;
 import com.xuan.xuanopenagent.agent.model.AgentEvent;
 import com.xuan.xuanopenagent.config.AgentProperties;
+import com.xuan.xuanopenagent.config.RagProperties;
 import com.xuan.xuanopenagent.model.ChatRequest;
+import com.xuan.xuanopenagent.rag.RagRetrievalService;
 import com.xuan.xuanopenagent.tools.TerminateTool;
 import com.xuan.xuanopenagent.tools.TimeGetTool;
 import com.xuan.xuanopenagent.tools.ToolRegistry;
 import com.xuan.xuanopenagent.tools.WebSearchTool;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.vectorstore.VectorStore;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class AgentServiceTest {
 
@@ -24,7 +28,9 @@ class AgentServiceTest {
         System.out.println("[TEST-START] shouldListToolsFromRegistry");
         AgentService agentService = new AgentService(
                 scriptedAgent(),
-            new ToolRegistry(new TimeGetTool(), new TerminateTool(), new WebSearchTool(), Optional.empty())
+                new ToolRegistry(new TimeGetTool(), new TerminateTool(), new WebSearchTool("https://api.tavily.com/search", "", 5, 15), Optional.empty()),
+                defaultRagRetrievalService(),
+                defaultRagProperties()
         );
 
         List<String> tools = agentService.listTools();
@@ -39,7 +45,9 @@ class AgentServiceTest {
         System.out.println("[TEST-START] shouldAcceptChatRequestAndReturnEmitter");
         AgentService agentService = new AgentService(
                 scriptedAgent(),
-            new ToolRegistry(new TimeGetTool(), new TerminateTool(), new WebSearchTool(), Optional.empty())
+                new ToolRegistry(new TimeGetTool(), new TerminateTool(), new WebSearchTool("https://api.tavily.com/search", "", 5, 15), Optional.empty()),
+                defaultRagRetrievalService(),
+                defaultRagProperties()
         );
 
         ChatRequest request = new ChatRequest();
@@ -61,7 +69,12 @@ class AgentServiceTest {
         properties.setMaxToolCalls(2);
         properties.setToolTimeoutSeconds(180);
 
-        ToolRegistry toolRegistry = new ToolRegistry(new TimeGetTool(), new TerminateTool(), new WebSearchTool(), Optional.empty());
+        ToolRegistry toolRegistry = new ToolRegistry(
+            new TimeGetTool(),
+            new TerminateTool(),
+            new WebSearchTool("https://api.tavily.com/search", "", 5, 15),
+            Optional.empty()
+        );
         return new XuanAgent((ChatClient) null, properties, toolRegistry) {
 
             @Override
@@ -84,5 +97,14 @@ class AgentServiceTest {
                 return super.run(context, emitter);
             }
         };
+    }
+
+    private RagRetrievalService defaultRagRetrievalService() {
+        VectorStore vectorStore = mock(VectorStore.class);
+        return new RagRetrievalService(vectorStore, defaultRagProperties());
+    }
+
+    private RagProperties defaultRagProperties() {
+        return new RagProperties();
     }
 }

@@ -5,6 +5,7 @@ export interface ChatOptions {
   temperature?: number
   useKnowledgeBase?: boolean
   fileIdFilter?: string
+  gameKey?: string
 }
 
 export interface ChatRequest {
@@ -44,6 +45,7 @@ export interface ChatMessage {
 export interface RetrievalHit {
   fileId: string
   fileName: string
+  gameKey?: string
   chunkIndex: number
   sourceType: string
   score: number
@@ -54,6 +56,8 @@ export type KnowledgeFileStatus = 'PROCESSING' | 'READY' | 'FAILED'
 
 export interface KnowledgeFile {
   fileId: string
+  gameKey?: string
+  tags?: string
   originalName: string
   storedName: string
   extension: string
@@ -71,4 +75,21 @@ export interface RagIngestionResult {
   status: string
   documentCount: number
   chunkCount: number
+}
+
+export interface RagBatchIngestionItem {
+  fileName: string
+  success: boolean
+  fileId?: string
+  status: string
+  documentCount?: number
+  chunkCount?: number
+  errorMessage?: string
+}
+
+export interface RagBatchIngestionResult {
+  totalFiles: number
+  successCount: number
+  failedCount: number
+  items: RagBatchIngestionItem[]
 }

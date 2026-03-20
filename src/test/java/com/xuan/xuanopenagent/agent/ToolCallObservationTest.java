@@ -24,7 +24,12 @@ class ToolCallObservationTest {
         properties.setMaxToolCalls(2);
         properties.setToolTimeoutSeconds(120);
 
-        ToolRegistry toolRegistry = new ToolRegistry(new TimeGetTool(), new TerminateTool(), new WebSearchTool(), Optional.empty());
+        ToolRegistry toolRegistry = new ToolRegistry(
+            new TimeGetTool(),
+            new TerminateTool(),
+            new WebSearchTool("https://api.tavily.com/search", "", 5, 15),
+            Optional.empty()
+        );
         ToolCallAgent agent = new ToolCallScriptedAgent(properties, toolRegistry);
 
         AgentContext context = AgentContext.initialize("session-tool-01", "user-01", "现在几点");

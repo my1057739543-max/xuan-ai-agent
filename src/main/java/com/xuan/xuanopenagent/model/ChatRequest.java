@@ -55,6 +55,7 @@ public class ChatRequest {
         private Double temperature;
         private Boolean useKnowledgeBase = false;
         private String fileIdFilter;
+        private String gameKey;
 
         public Integer getMaxSteps() {
             return maxSteps;
@@ -86,6 +87,14 @@ public class ChatRequest {
 
         public void setFileIdFilter(String fileIdFilter) {
             this.fileIdFilter = fileIdFilter;
+        }
+
+        public String getGameKey() {
+            return gameKey;
+        }
+
+        public void setGameKey(String gameKey) {
+            this.gameKey = gameKey;
         }
     }
 }

@@ -14,7 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'refresh'): void
-  (event: 'upload', file: File): void
+  (event: 'upload', files: File[], gameKey: string, tags?: string): void
   (event: 'delete', fileId: string): void
   (event: 'update:useKnowledgeBase', value: boolean): void
   (event: 'update:fileIdFilter', value: string): void
@@ -39,7 +39,7 @@ const emit = defineEmits<{
       <span>使用知识库回答</span>
     </label>
 
-    <KnowledgeUploadPanel :uploading="uploading" @upload="(file) => emit('upload', file)" />
+    <KnowledgeUploadPanel :uploading="uploading" @upload="(files, gameKey, tags) => emit('upload', files, gameKey, tags)" />
 
     <KnowledgeFileTable
       :files="files"

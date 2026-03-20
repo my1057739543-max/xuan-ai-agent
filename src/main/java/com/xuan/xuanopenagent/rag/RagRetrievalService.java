@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -23,15 +24,24 @@ public class RagRetrievalService {
         this.ragProperties = ragProperties;
     }
 
-    public List<RetrievalHit> retrieve(String query, String fileIdFilter) {
+    public List<RetrievalHit> retrieve(String query, String fileIdFilter, String gameKeyFilter) {
         SearchRequest.Builder builder = SearchRequest.builder()
                 .query(query)
                 .topK(ragProperties.getTopK())
                 .similarityThreshold(ragProperties.getSimilarityThreshold());
 
-        if (fileIdFilter != null && !fileIdFilter.isBlank()) {
-            FilterExpressionBuilder filterBuilder = new FilterExpressionBuilder();
-            builder.filterExpression(filterBuilder.eq("fileId", fileIdFilter).build());
+        String normalizedFileIdFilter = normalize(fileIdFilter);
+        String normalizedGameKeyFilter = normalize(gameKeyFilter);
+
+        if (ragProperties.isGameIsolationEnabled() && normalizedGameKeyFilter == null) {
+            return List.of();
+        }
+
+        FilterExpressionBuilder filterBuilder = new FilterExpressionBuilder();
+        if (normalizedFileIdFilter != null) {
+            builder.filterExpression(filterBuilder.eq("fileId", normalizedFileIdFilter).build());
+        } else if (normalizedGameKeyFilter != null) {
+            builder.filterExpression(filterBuilder.eq("gameKey", normalizedGameKeyFilter).build());
         }
 
         List<Document> documents = vectorStore.similaritySearch(builder.build());
@@ -39,9 +49,24 @@ public class RagRetrievalService {
 
         for (Document document : documents) {
             Map<String, Object> metadata = document.getMetadata();
+
+            if (normalizedFileIdFilter != null) {
+                String fileId = normalize(asString(metadata.get("fileId")));
+                if (!normalizedFileIdFilter.equals(fileId)) {
+                    continue;
+                }
+            }
+            if (ragProperties.isGameIsolationEnabled()) {
+                String gameKey = normalize(asString(metadata.get("gameKey")));
+                if (normalizedGameKeyFilter == null || !normalizedGameKeyFilter.equals(gameKey)) {
+                    continue;
+                }
+            }
+
             RetrievalHit hit = new RetrievalHit();
             hit.setFileId(asString(metadata.get("fileId")));
             hit.setFileName(asString(metadata.get("fileName")));
+            hit.setGameKey(asString(metadata.get("gameKey")));
             hit.setChunkIndex(asInt(metadata.get("chunkIndex")));
             hit.setSourceType(asString(metadata.get("sourceType")));
             hit.setScore(document.getScore() == null ? 0.0 : document.getScore());
@@ -64,6 +89,7 @@ public class RagRetrievalService {
             sb.append(i + 1)
                     .append(". fileId=").append(defaultIfBlank(hit.getFileId(), "unknown"))
                     .append(", fileName=").append(defaultIfBlank(hit.getFileName(), "unknown"))
+                    .append(", gameKey=").append(defaultIfBlank(hit.getGameKey(), "unknown"))
                     .append(", chunkIndex=").append(hit.getChunkIndex())
                     .append("\n")
                     .append(hit.getContentSnippet())
@@ -106,5 +132,12 @@ public class RagRetrievalService {
             return fallback;
         }
         return value;
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 }

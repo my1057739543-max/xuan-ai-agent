@@ -20,6 +20,7 @@ public class XuanAgent extends ToolCallAgent {
 
 	@Override
 	protected String think(AgentContext context) {
+		String systemPrompt = buildSystemPrompt("thought");
 		String prompt = """
 				你是一个 ReAct Agent。
 				当前目标：%s
@@ -29,11 +30,12 @@ public class XuanAgent extends ToolCallAgent {
 				请输出简短 thought，说明下一步要做什么。
 				""".formatted(context.getMessage(), context.getCurrentStep(), historyToText(context.getHistory()));
 
-		return callModel(prompt);
+		return callModel(systemPrompt, prompt);
 	}
 
 	@Override
 	protected Decision decide(AgentContext context, String thought) {
+		String systemPrompt = buildSystemPrompt("decision");
 		String availableTools = String.join(", ", toolRegistry.getRegisteredToolNames());
 		String prompt = """
 				你是一个 ReAct Agent 的决策器。
@@ -54,12 +56,13 @@ public class XuanAgent extends ToolCallAgent {
 				- 如果任务应结束，ACTION=TERMINATE，CONTENT 写结束理由。
 				""".formatted(context.getMessage(), thought, availableTools);
 
-		String raw = callModel(prompt);
+		String raw = callModel(systemPrompt, prompt);
 		return parseDecision(raw);
 	}
 
 	@Override
 	protected String generateFinalResponse(AgentContext context, String thought) {
+		String systemPrompt = buildSystemPrompt("final");
 		String prompt = """
 				请根据用户问题和当前上下文生成最终回复。
 				用户问题：%s
@@ -70,16 +73,30 @@ public class XuanAgent extends ToolCallAgent {
 				- 用中文回复
 				- 直接给结论
 				- 结构简洁
+				- 最终回答必须是纯文本，不要使用 Markdown 格式
+				- 不要输出 **、#、```、>、- 这类 Markdown 标记
+				- 如需分点，可用 1. 2. 3. 的纯文本编号
+				- 若问题与游戏技巧无关，明确说明你专注游戏领域，并引导用户给出游戏相关问题
 				""".formatted(context.getMessage(), thought, historyToText(context.getHistory()));
-		return callModel(prompt);
+		return callModel(systemPrompt, prompt);
 	}
 
-	private String callModel(String userPrompt) {
+	private String callModel(String systemPrompt, String userPrompt) {
 		String content = chatClient.prompt()
+				.system(systemPrompt)
 				.user(userPrompt)
 				.call()
 				.content();
 		return content == null ? "" : content.trim();
+	}
+
+	private String buildSystemPrompt(String stage) {
+		return agentProperties.getSystemPrompt() + "\n"
+				+ "你必须遵循：\n"
+				+ "1) 仅处理游戏相关内容（玩法、技巧、训练、配置、战术、角色理解）。\n"
+				+ "2) 对非游戏问题简洁拒答并引导到游戏问题。\n"
+				+ "3) 回答优先给可执行步骤，避免空泛表述。\n"
+				+ "当前阶段=" + stage;
 	}
 
 	private String historyToText(List<String> history) {

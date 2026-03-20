@@ -11,7 +11,10 @@ spring:
     dashscope:
       # Keep DeepSeek as chat provider.
       chat:
-        enabled: false
+        enabled: true
+        options:
+          model: qwen-turbo
+          temperature: 0.2
       embedding:
         enabled: true
         options:
@@ -27,11 +30,9 @@ spring:
         max-document-batch-size: 10000
     mcp:
       client:
-        enabled: true
+        enabled: false
         type: SYNC
         request-timeout: 30s
-        stdio:
-          servers-configuration: classpath:mcp-servers.json
   profiles:
     active: local
   application:
@@ -45,10 +46,29 @@ server:
 
 xuan:
   rag:
+    game-isolation-enabled: true
+    supported-game-keys:
+      - valorant
+      - cs2
+      - apex
+      - lol
+    game-alias-map:
+      瓦: valorant
+      瓦罗兰特: valorant
+      valorant: valorant
+      cs: cs2
+      cs2: cs2
+      反恐精英2: cs2
+      apex: apex
+      apex legends: apex
+      lol: lol
+      英雄联盟: lol
+    default-game-key:
     upload-dir: ./data/uploads
     chunk-size: 800
     min-chunk-size-chars: 350
     min-chunk-length-to-embed: 10
+    embedding-batch-size: 10
     top-k: 4
     similarity-threshold: 0.5
     advisor-allow-empty-context: true
@@ -57,6 +77,16 @@ xuan:
       - txt
       - md
       - pdf
+    # LLM Chunking Configuration (M2)
+    chunk-strategy: llm_first  # "llm_first" or "rule_only"
+    chunk-llm-enabled: true
+    chunk-llm-model: qwen-turbo
+    chunk-llm-timeout-seconds: 20
+    chunk-llm-max-input-tokens: 6000
+    chunk-llm-max-output-chunks: 24
+    chunk-fallback-to-rule: true
+    chunk-max-tokens: 700
+    chunk-overlap-tokens: 80
   agent:
     # Global thinking step limit. Change here and restart backend to affect the whole app.
     max-steps: 20
@@ -64,6 +94,17 @@ xuan:
     max-tool-calls: 10
     tool-timeout-seconds: 180
     model-name: ${spring.ai.deepseek.chat.options.model:deepseek-chat}
+    system-prompt: 你是一个专职游戏技巧助手，专门回答游戏相关领域知识与训练方法。
+    intent-rewrite:
+      enabled: true
+      model: qwen-turbo
+      timeout-seconds: 8
+    game-infer:
+      enabled: true
+    memory-summary:
+      enabled: true
+      every-n-turns: 6
+      ttl-minutes: 180
   tools:
     web-search:
       enabled: true

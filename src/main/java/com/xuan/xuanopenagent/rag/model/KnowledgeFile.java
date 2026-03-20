@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 public class KnowledgeFile {
 
     private String fileId;
+    private String gameKey;
+    private String tags;
     private String originalName;
     private String storedName;
     private String extension;
@@ -18,6 +20,12 @@ public class KnowledgeFile {
 
     public String getFileId() { return fileId; }
     public void setFileId(String fileId) { this.fileId = fileId; }
+
+    public String getGameKey() { return gameKey; }
+    public void setGameKey(String gameKey) { this.gameKey = gameKey; }
+
+    public String getTags() { return tags; }
+    public void setTags(String tags) { this.tags = tags; }
 
     public String getOriginalName() { return originalName; }
     public void setOriginalName(String originalName) { this.originalName = originalName; }
