@@ -277,7 +277,79 @@ npm run build
 
 ---
 
-## 11. 路线建议
+## 11. Docker 部署（前后端 + PostgreSQL + pgvector）
+
+项目已提供以下容器化文件：
+
+- 后端镜像：Dockerfile
+- 前端镜像：frontend/Dockerfile
+- Nginx 反向代理：frontend/nginx/default.conf
+- 数据库初始化：docker/postgres-init/01-init.sql
+- 一键编排：docker-compose.yml
+
+### 11.1 准备环境变量
+
+在项目根目录创建 .env（可从 .env.example 复制）：
+
+```bash
+cp .env.example .env
+```
+
+至少填写：
+
+- SPRING_AI_DEEPSEEK_API_KEY
+- SPRING_AI_DASHSCOPE_API_KEY
+
+### 11.2 一键启动
+
+```bash
+docker compose up -d --build
+```
+
+启动后访问：
+
+- 前端：http://localhost
+- 后端健康检查：http://localhost:8123/health
+
+### 11.3 常用运维命令
+
+查看日志：
+
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f db
+```
+
+停止并删除容器：
+
+```bash
+docker compose down
+```
+
+停止并删除容器 + 数据卷（清库）：
+
+```bash
+docker compose down -v
+```
+
+### 11.4 部署说明
+
+- 前端容器通过 Nginx 将 /api 和 /health 反代到 backend:8123
+- PostgreSQL 使用 pgvector/pgvector:pg16 镜像
+- 启动时自动执行 CREATE EXTENSION IF NOT EXISTS vector
+- 上传文件目录挂载到 Docker Volume（uploads）
+
+### 11.5 生产建议
+
+- 将 API Key 放在安全的 Secret 管理系统（不要直接提交 .env）
+- 使用反向代理（Nginx/Caddy）接入 HTTPS
+- 为 PostgreSQL 配置持久化备份策略
+- 限制开放端口，至少不要直接暴露数据库到公网
+
+---
+
+## 12. 路线建议
 
 - 增加模型降级事件（model_fallback）用于前端可观测
 - 引入更细粒度的工具调度策略（按意图限制工具）
@@ -286,6 +358,6 @@ npm run build
 
 ---
 
-## 12. License
+## 13. License
 
 See LICENSE.

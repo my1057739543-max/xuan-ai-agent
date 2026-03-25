@@ -1,5 +1,5 @@
 application-local.yml
-
+.env
 
 HELP.md
 target/
